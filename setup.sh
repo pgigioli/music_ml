@@ -8,4 +8,7 @@ tar -xzf libsndfile-1.0.28.tar.gz
 cd libsndfile-1.0.28
 ./configure --prefix=/usr --disable-static --docdir=/usr/share/doc/libsndfile-1.0.28
 sudo make install
-rm ../libsndfile-1.0.28.tar.gz
+cd ../
+rm libsndfile-1.0.28.tar.gz
+sudo yum install alsa-lib-devel
+pip install magenta --user -y
