@@ -10,5 +10,5 @@ cd libsndfile-1.0.28
 sudo make install
 cd ../
 rm libsndfile-1.0.28.tar.gz
-sudo yum install alsa-lib-devel
-pip install magenta --user -y
+sudo yum install alsa-lib-devel -y
+pip install magenta --user
