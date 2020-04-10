@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# install resource monitor
+sudo yum install htop -y
+
 # install librosa
 pip install librosa --user
 
