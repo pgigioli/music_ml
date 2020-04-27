@@ -20,6 +20,9 @@ rm libsndfile-1.0.28.tar.gz
 sudo yum install alsa-lib-devel -y
 pip install magenta --user
 
+# upgrade numpy
+pip install --upgrade numpy
+
 # download wavenet weights
 cd music_ml
 wget http://download.magenta.tensorflow.org/models/nsynth/wavenet-ckpt.tar
