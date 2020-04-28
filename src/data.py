@@ -10,7 +10,7 @@ import scipy.io.wavfile as sciwav
 from torch.utils.data import Dataset
 
 class NSynthDataset(Dataset):
-    def __init__(self, bucket, nsynth_path, instrument_source=(0, 1, 2), feature_type='mfcc', scaling=None):
+    def __init__(self, bucket, nsynth_path, instrument_source=(0, 1, 2), feature_type='mfcc', scaling=None, include_meta=False):
         if scaling not in [None, 'standardize', 'normalize']:
             raise Exception('scaling must be one of: None, "standardize", or "normalize"')
         
@@ -18,6 +18,7 @@ class NSynthDataset(Dataset):
         self.nsynth_path = nsynth_path
         self.feature_type = feature_type 
         self.scaling = scaling
+        self.include_meta = include_meta
         
         self.s3_client = boto3.client('s3')
         self.s3_resource = boto3.resource('s3')
@@ -33,7 +34,11 @@ class NSynthDataset(Dataset):
     def __getitem__(self, idx):
         wav_fname = self.files[idx] + '.wav'
         features = self.extract_features(wav_fname)
-        return features
+        
+        if self.include_meta:
+            return features, self.meta[self.files[idx]]
+        else:
+            return features
     
     def extract_features(self, wav_fname):
         obj = self.s3_resource.Object(self.bucket, os.path.join(self.nsynth_path, 'audio/{}'.format(wav_fname)))
