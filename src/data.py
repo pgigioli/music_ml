@@ -6,11 +6,13 @@ import json
 import io
 import sklearn
 import scipy.io.wavfile as sciwav
+from skimage.transform import resize
 
 from torch.utils.data import Dataset
 
 class NSynthDataset(Dataset):
-    def __init__(self, bucket, nsynth_path, instrument_source=(0, 1, 2), feature_type='mfcc', scaling=None, include_meta=False):
+    def __init__(self, bucket, nsynth_path, instrument_source=(0, 1, 2), feature_type='mfcc', scaling=None, include_meta=False,
+                 resize=None):
         if scaling not in [None, 'standardize', 'normalize']:
             raise Exception('scaling must be one of: None, "standardize", or "normalize"')
         
@@ -19,6 +21,11 @@ class NSynthDataset(Dataset):
         self.feature_type = feature_type 
         self.scaling = scaling
         self.include_meta = include_meta
+        self.resize = resize
+        
+        if resize:
+            if type(resize) != tuple and len(resize) != 2:
+                raise Exception('resize must be tuple of length 2')
         
         self.s3_client = boto3.client('s3')
         self.s3_resource = boto3.resource('s3')
@@ -57,5 +64,8 @@ class NSynthDataset(Dataset):
             features = sklearn.preprocessing.scale(features, axis=1)
         elif self.scaling == 'normalize':
             features = (features - features.min()) / (features.max() - features.min())
+            
+        if self.resize:
+            features = resize(features, self.resize)
 
         return features
