@@ -12,6 +12,10 @@ class Autoencoder(nn.Module):
             nn.ReLU(),
             nn.BatchNorm2d(64),
             
+            nn.Conv2d(64, 64, 4, padding=1, stride=(2, 2)),
+            nn.ReLU(),
+            nn.BatchNorm2d(64),
+            
             nn.Conv2d(64, 128, 4, padding=1, stride=(2, 2)),
             nn.ReLU(),
             nn.BatchNorm2d(128),
@@ -32,21 +36,13 @@ class Autoencoder(nn.Module):
             nn.ReLU(),
             nn.BatchNorm2d(512),
             
-            nn.Conv2d(512, 1024, 4, padding=1, stride=(2, 2)),
-            nn.ReLU(),
-            nn.BatchNorm2d(1024),
-            
-            nn.Conv2d(1024, h_dim, 1, stride=1),
+            nn.Conv2d(512, h_dim, 1, stride=1),
             nn.ReLU(),
             nn.BatchNorm2d(h_dim)
         )
 
         self.decode = nn.Sequential(
-            nn.ConvTranspose2d(h_dim, 1024, 1, stride=1),
-            nn.ReLU(),
-            nn.BatchNorm2d(1024),
-            
-            nn.ConvTranspose2d(1024, 512, 4, padding=1, stride=2),
+            nn.ConvTranspose2d(h_dim, 512, 1, stride=1),
             nn.ReLU(),
             nn.BatchNorm2d(512),
             
@@ -70,9 +66,150 @@ class Autoencoder(nn.Module):
             nn.ReLU(),
             nn.BatchNorm2d(64),
             
+            nn.ConvTranspose2d(64, 64, 4, padding=1, stride=2),
+            nn.ReLU(),
+            nn.BatchNorm2d(64),
+            
             nn.ConvTranspose2d(64, 1, 4, padding=1, stride=2),
             nn.Sigmoid()
         )
+        
+    def forward(self, x):
+        h = self.encode(x)
+        return self.decode(h)
+    
+class AutoencoderLite(nn.Module):
+    def __init__(self, h_dim=512):
+        super(AutoencoderLite, self).__init__()
+        
+        # (1, 128, 128)
+        self.encode = nn.Sequential(
+            nn.Conv2d(1, 64, 8, padding=2, stride=4),
+            nn.ReLU(),
+            nn.BatchNorm2d(64),
+            
+            nn.Conv2d(64, 128, 8, padding=2, stride=4),
+            nn.ReLU(),
+            nn.BatchNorm2d(128),
+            
+            nn.Conv2d(128, 256, 4, padding=1, stride=2),
+            nn.ReLU(),
+            nn.BatchNorm2d(256),
+            
+            nn.Conv2d(256, 512, 4, padding=0, stride=1),
+            nn.ReLU(),
+            nn.BatchNorm2d(512),
+            
+            nn.Conv2d(512, h_dim, 1, stride=1),
+            nn.ReLU(),
+            nn.BatchNorm2d(h_dim)
+        )
+
+        self.decode = nn.Sequential(
+            nn.ConvTranspose2d(h_dim, 512, 1, stride=1),
+            nn.ReLU(),
+            nn.BatchNorm2d(512),
+            
+            nn.ConvTranspose2d(512, 256, 4, padding=0, stride=1),
+            nn.ReLU(),
+            nn.BatchNorm2d(256),
+            
+            nn.ConvTranspose2d(256, 128, 4, padding=1, stride=2),
+            nn.ReLU(),
+            nn.BatchNorm2d(128),
+            
+            nn.ConvTranspose2d(128, 64, 8, padding=2, stride=4),
+            nn.ReLU(),
+            nn.BatchNorm2d(64),
+            
+            nn.ConvTranspose2d(64, 1, 8, padding=2, stride=4),
+            nn.Sigmoid()
+        )
+        
+    def forward(self, x):
+        h = self.encode(x)
+        return self.decode(h)
+    
+class SpatialTimeAutoencoder(nn.Module):
+    def __init__(self, h_dim=512):
+        super(SpatialTimeAutoencoder, self).__init__()
+        
+        # (1, 128, 128)
+        self.time_encode = nn.Sequential(
+            nn.Conv2d(1, 1, (128, 3), padding=(0, 1), stride=1),
+            nn.ReLU()
+        )
+        
+        self.spatial_encode = nn.Sequential(
+            nn.Conv2d(1, 64, 4, padding=1, stride=(2, 2)),
+            nn.ReLU(),
+            nn.BatchNorm2d(64),
+            
+            nn.Conv2d(64, 64, 4, padding=1, stride=(2, 2)),
+            nn.ReLU(),
+            nn.BatchNorm2d(64),
+            
+            nn.Conv2d(64, 128, 4, padding=1, stride=(2, 2)),
+            nn.ReLU(),
+            nn.BatchNorm2d(128),
+            
+            nn.Conv2d(128, 128, 4, padding=1, stride=(2, 2)),
+            nn.ReLU(),
+            nn.BatchNorm2d(128),
+            
+            nn.Conv2d(128, 256, 4, padding=1, stride=(2, 2)),
+            nn.ReLU(),
+            nn.BatchNorm2d(256),
+            
+            nn.Conv2d(256, 256, 4, padding=1, stride=(2, 2)),
+            nn.ReLU(),
+            nn.BatchNorm2d(256),
+            
+            nn.Conv2d(256, 512, 4, padding=1, stride=(2, 2)),
+            nn.ReLU(),
+            nn.BatchNorm2d(512)
+        )
+
+        self.dense_concat = nn.Conv2d(128+512, h_dim, 1, stride=1)
+        
+        self.decode = nn.Sequential(
+            nn.ConvTranspose2d(h_dim, 512, 1, stride=1),
+            nn.ReLU(),
+            nn.BatchNorm2d(512),
+            
+            nn.ConvTranspose2d(512, 256, 4, padding=1, stride=2),
+            nn.ReLU(),
+            nn.BatchNorm2d(256),
+            
+            nn.ConvTranspose2d(256, 256, 4, padding=1, stride=2),
+            nn.ReLU(),
+            nn.BatchNorm2d(256),
+            
+            nn.ConvTranspose2d(256, 128, 4, padding=1, stride=2),
+            nn.ReLU(),
+            nn.BatchNorm2d(128),
+            
+            nn.ConvTranspose2d(128, 128, 4, padding=1, stride=2),
+            nn.ReLU(),
+            nn.BatchNorm2d(128),
+            
+            nn.ConvTranspose2d(128, 64, 4, padding=1, stride=2),
+            nn.ReLU(),
+            nn.BatchNorm2d(64),
+            
+            nn.ConvTranspose2d(64, 64, 4, padding=1, stride=2),
+            nn.ReLU(),
+            nn.BatchNorm2d(64),
+            
+            nn.ConvTranspose2d(64, 1, 4, padding=1, stride=2),
+            nn.Sigmoid()
+        )
+        
+    def encode(self, x):
+        t_h = self.time_encode(x)
+        s_h = self.spatial_encode(x)
+        h = torch.cat([s_h, t_h.permute(0, 3, 1, 2)], 1)
+        return F.relu(self.dense_concat(h))
         
     def forward(self, x):
         h = self.encode(x)

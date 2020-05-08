@@ -60,12 +60,12 @@ class NSynthDataset(Dataset):
         else:
             raise Exception('feat must be "mfcc" or "mel"')
             
+        if self.resize:
+            features = resize(features, self.resize)
+            
         if self.scaling == 'standardize':
             features = sklearn.preprocessing.scale(features, axis=1)
         elif self.scaling == 'normalize':
             features = (features - features.min()) / (features.max() - features.min())
-            
-        if self.resize:
-            features = resize(features, self.resize)
 
         return features
