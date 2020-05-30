@@ -12,7 +12,7 @@ from torch.utils.data import Dataset
 
 class NSynthDataset(Dataset):
     def __init__(self, bucket, nsynth_path, instrument_source=(0, 1, 2), feature_type='mfcc', scaling=None, include_meta=False,
-                 resize=None):
+                 resize=None, remove_synth_lead=False):
         if scaling not in [None, 'standardize', 'normalize']:
             raise Exception('scaling must be one of: None, "standardize", or "normalize"')
         
@@ -33,6 +33,10 @@ class NSynthDataset(Dataset):
         meta_obj = self.s3_client.get_object(Bucket=self.bucket, Key=os.path.join(self.nsynth_path, 'examples.json'))
         self.meta = json.loads(meta_obj['Body'].read().decode('utf-8'))
         self.meta = dict([(k, v) for k, v in self.meta.items() if v['instrument_source'] in instrument_source])
+        
+        if remove_synth_lead:
+            self.meta = dict([(k, v) for k, v in self.meta.items() if v['instrument_family_str'] != 'synth_lead'])
+        
         self.files = list(self.meta.keys())
 
     def __len__(self):
@@ -57,8 +61,10 @@ class NSynthDataset(Dataset):
             features = librosa.feature.mfcc(y=X, sr=sample_rate, n_mfcc=40)
         elif self.feature_type == 'mel':
             features = librosa.feature.melspectrogram(y=X, sr=sample_rate, n_fft=1024, hop_length=256)
+        elif self.feature_type == 'raw':
+            features = X
         else:
-            raise Exception('feat must be "mfcc" or "mel"')
+            raise Exception('feat must be "raw", "mfcc", "mel"')
             
         if self.resize:
             features = resize(features, self.resize)
