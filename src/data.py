@@ -12,7 +12,7 @@ from torch.utils.data import Dataset
 
 class NSynthDataset(Dataset):
     def __init__(self, bucket, nsynth_path, instrument_source=(0, 1, 2), feature_type='mfcc', scaling=None, include_meta=False,
-                 resize=None, remove_synth_lead=False):
+                 resize=None, remove_synth_lead=False, n_samples_per_class=None):
         if scaling not in [None, 'standardize', 'normalize']:
             raise Exception('scaling must be one of: None, "standardize", or "normalize"')
         
@@ -31,12 +31,23 @@ class NSynthDataset(Dataset):
         self.s3_resource = boto3.resource('s3')
         
         meta_obj = self.s3_client.get_object(Bucket=self.bucket, Key=os.path.join(self.nsynth_path, 'examples.json'))
-        self.meta = json.loads(meta_obj['Body'].read().decode('utf-8'))
-        self.meta = dict([(k, v) for k, v in self.meta.items() if v['instrument_source'] in instrument_source])
+        meta = json.loads(meta_obj['Body'].read().decode('utf-8'))
         
-        if remove_synth_lead:
-            self.meta = dict([(k, v) for k, v in self.meta.items() if v['instrument_family_str'] != 'synth_lead'])
-        
+        self.meta = {}
+        class_cts = {}
+        for k, v in meta.items():
+            if v['instrument_source'] not in instrument_source:
+                continue
+            if remove_synth_lead and (v['instrument_family_str'] == 'synth_lead'):
+                continue
+            
+            label = v['instrument_family_str']
+            class_cts[label] = class_cts.get(label, 0) + 1
+            if n_samples_per_class and (class_cts[label] > n_samples_per_class):
+                continue
+                
+            self.meta[k] = v
+            
         self.files = list(self.meta.keys())
 
     def __len__(self):

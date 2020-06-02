@@ -52,53 +52,87 @@ class WavClassifier(nn.Module):
     def __init__(self, n_classes, h_dim=128):
         super(WavClassifier, self).__init__()
         
-        # (1, 1, 64000)
-        self.feature_extractor = nn.Sequential(
-            nn.Conv1d(1, 128, kernel_size=1024, stride=494),
+        self.encode = nn.Sequential(
+            nn.Conv1d(1, 64, kernel_size=1024, stride=256, padding=384),
             nn.ReLU(),
-            nn.BatchNorm1d(128)
+            nn.BatchNorm1d(64),
+
+            nn.Conv1d(64, 64, kernel_size=4, stride=2, padding=1),
+            nn.ReLU(),
+            nn.BatchNorm1d(64),
+
+            nn.Conv1d(64, 64, kernel_size=4, stride=2, padding=1),
+            nn.ReLU(),
+            nn.BatchNorm1d(64),
+
+            nn.Conv1d(64, 128, kernel_size=4, stride=2, padding=1),
+            nn.ReLU(),
+            nn.BatchNorm1d(128),
+
+            nn.Conv1d(128, 128, kernel_size=4, stride=2, padding=1),
+            nn.ReLU(),
+            nn.BatchNorm1d(128),
+
+            nn.Conv1d(128, 256, kernel_size=4, stride=2, padding=1),
+            nn.ReLU(),
+            nn.BatchNorm1d(256),
+
+            nn.Conv1d(256, 256, kernel_size=4, stride=2, padding=1),
+            nn.ReLU(),
+            nn.BatchNorm1d(256),
+
+            nn.Conv1d(256, 512, kernel_size=4, stride=2, padding=1),
+            nn.ReLU(),
+            nn.BatchNorm1d(512),
+
+            nn.Conv1d(512, h_dim, kernel_size=4, stride=2, padding=1),
+            nn.ReLU(),
+            nn.BatchNorm1d(h_dim),
         )
         
-        # (1, 128, 128)
-        self.encoder = nn.Sequential(
-            nn.Conv2d(1, 64, 4, padding=1, stride=(2, 2)),
-            nn.ReLU(),
-            nn.BatchNorm2d(64),
+#         # (1, 1, 64000)
+#         self.feature_extractor = nn.Sequential(
+#             nn.Conv1d(1, 128, kernel_size=1024, stride=494),
+#             nn.ReLU(),
+#             nn.BatchNorm1d(128)
+#         )
+        
+#         # (1, 128, 128)
+#         self.encoder = nn.Sequential(
+#             nn.Conv2d(1, 64, 4, padding=1, stride=(2, 2)),
+#             nn.ReLU(),
+#             nn.BatchNorm2d(64),
             
-            nn.Conv2d(64, 64, 4, padding=1, stride=(2, 2)),
-            nn.ReLU(),
-            nn.BatchNorm2d(64),
+#             nn.Conv2d(64, 64, 4, padding=1, stride=(2, 2)),
+#             nn.ReLU(),
+#             nn.BatchNorm2d(64),
             
-            nn.Conv2d(64, 128, 4, padding=1, stride=(2, 2)),
-            nn.ReLU(),
-            nn.BatchNorm2d(128),
+#             nn.Conv2d(64, 128, 4, padding=1, stride=(2, 2)),
+#             nn.ReLU(),
+#             nn.BatchNorm2d(128),
             
-            nn.Conv2d(128, 128, 4, padding=1, stride=(2, 2)),
-            nn.ReLU(),
-            nn.BatchNorm2d(128),
+#             nn.Conv2d(128, 128, 4, padding=1, stride=(2, 2)),
+#             nn.ReLU(),
+#             nn.BatchNorm2d(128),
             
-            nn.Conv2d(128, 256, 4, padding=1, stride=(2, 2)),
-            nn.ReLU(),
-            nn.BatchNorm2d(256),
+#             nn.Conv2d(128, 256, 4, padding=1, stride=(2, 2)),
+#             nn.ReLU(),
+#             nn.BatchNorm2d(256),
             
-            nn.Conv2d(256, 256, 4, padding=1, stride=(2, 2)),
-            nn.ReLU(),
-            nn.BatchNorm2d(256),
+#             nn.Conv2d(256, 256, 4, padding=1, stride=(2, 2)),
+#             nn.ReLU(),
+#             nn.BatchNorm2d(256),
             
-            nn.Conv2d(256, 512, 4, padding=1, stride=(2, 2)),
-            nn.ReLU(),
-            nn.BatchNorm2d(512),
+#             nn.Conv2d(256, 512, 4, padding=1, stride=(2, 2)),
+#             nn.ReLU(),
+#             nn.BatchNorm2d(512),
             
-            nn.Conv2d(512, h_dim, 1, stride=1),
-            nn.ReLU(),
-            nn.BatchNorm2d(h_dim)
-        )
+#             nn.Conv2d(512, h_dim, 1, stride=1),
+#             nn.ReLU(),
+#             nn.BatchNorm2d(h_dim)
+#         )
 
         self.out = nn.Linear(h_dim, n_classes, bias=True)
-        
-    def encode(self, x):
-        h = self.feature_extractor(x).unsqueeze(1)
-        return self.encoder(h)
         
     def forward(self, x):
         h = self.encode(x)
