@@ -1,0 +1,5 @@
+jupyterlab
+librosa
+matplotlib
+scikit-image
+boto3

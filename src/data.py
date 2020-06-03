@@ -11,27 +11,30 @@ from skimage.transform import resize
 from torch.utils.data import Dataset
 
 class NSynthDataset(Dataset):
-    def __init__(self, bucket, nsynth_path, instrument_source=(0, 1, 2), feature_type='mfcc', scaling=None, include_meta=False,
+    def __init__(self, nsynth_path, s3_bucket=None, instrument_source=(0, 1, 2), feature_type='mfcc', scaling=None, include_meta=False,
                  resize=None, remove_synth_lead=False, n_samples_per_class=None):
         if scaling not in [None, 'standardize', 'normalize']:
             raise Exception('scaling must be one of: None, "standardize", or "normalize"')
         
-        self.bucket = bucket
         self.nsynth_path = nsynth_path
+        self.s3_bucket = s3_bucket
         self.feature_type = feature_type 
         self.scaling = scaling
         self.include_meta = include_meta
         self.resize = resize
         
-        if resize:
-            if type(resize) != tuple and len(resize) != 2:
-                raise Exception('resize must be tuple of length 2')
+        if resize and type(resize) != tuple:
+            raise Exception('resize must be tuple')
         
-        self.s3_client = boto3.client('s3')
-        self.s3_resource = boto3.resource('s3')
+        if self.s3_bucket:
+            self.s3_client = boto3.client('s3')
+            self.s3_resource = boto3.resource('s3')
         
-        meta_obj = self.s3_client.get_object(Bucket=self.bucket, Key=os.path.join(self.nsynth_path, 'examples.json'))
-        meta = json.loads(meta_obj['Body'].read().decode('utf-8'))
+            meta_obj = self.s3_client.get_object(Bucket=self.s3_bucket, Key=os.path.join(self.nsynth_path, 'examples.json'))
+            meta = json.loads(meta_obj['Body'].read().decode('utf-8'))
+        else:
+            with open(os.path.join(self.nsynth_path, 'examples.json'), 'r') as read_file:
+                meta = json.load(read_file)
         
         self.meta = {}
         class_cts = {}
@@ -63,8 +66,11 @@ class NSynthDataset(Dataset):
             return features
     
     def extract_features(self, wav_fname):
-        obj = self.s3_resource.Object(self.bucket, os.path.join(self.nsynth_path, 'audio/{}'.format(wav_fname)))
-        sample_rate, X = sciwav.read(io.BytesIO(obj.get()['Body'].read()))
+        if self.s3_bucket:
+            obj = self.s3_resource.Object(self.s3_bucket, os.path.join(self.nsynth_path, 'audio/{}'.format(wav_fname)))
+            sample_rate, X = sciwav.read(io.BytesIO(obj.get()['Body'].read()))
+        else:
+            sample_rate, X = sciwav.read(os.path.join(self.nsynth_path, 'audio/{}'.format(wav_fname)))
         X = X.astype(np.float32)
 
 
