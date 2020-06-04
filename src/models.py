@@ -3,20 +3,12 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 class Classifier(nn.Module):
-    def __init__(self, n_classes, h_dim=128):
+    def __init__(self, n_classes, h_dim=1024):
         super(Classifier, self).__init__()
         
         # (1, 128, 128)
         self.encode = nn.Sequential(
-            nn.Conv2d(1, 64, 4, padding=1, stride=(2, 2)),
-            nn.ReLU(),
-            nn.BatchNorm2d(64),
-            
-            nn.Conv2d(64, 64, 4, padding=1, stride=(2, 2)),
-            nn.ReLU(),
-            nn.BatchNorm2d(64),
-            
-            nn.Conv2d(64, 128, 4, padding=1, stride=(2, 2)),
+            nn.Conv2d(1, 128, 4, padding=1, stride=(2, 2)),
             nn.ReLU(),
             nn.BatchNorm2d(128),
             
@@ -36,7 +28,15 @@ class Classifier(nn.Module):
             nn.ReLU(),
             nn.BatchNorm2d(512),
             
-            nn.Conv2d(512, h_dim, 1, stride=1),
+            nn.Conv2d(512, 512, 4, padding=1, stride=(2, 2)),
+            nn.ReLU(),
+            nn.BatchNorm2d(512),
+            
+            nn.Conv2d(512, 1024, 4, padding=1, stride=(2, 2)),
+            nn.ReLU(),
+            nn.BatchNorm2d(1024),
+            
+            nn.Conv2d(1024, h_dim, 1, stride=1),
             nn.ReLU(),
             nn.BatchNorm2d(h_dim)
         )
@@ -49,31 +49,28 @@ class Classifier(nn.Module):
         return self.out(h)
     
 class WavClassifier(nn.Module):
-    def __init__(self, n_classes, h_dim=128):
+    def __init__(self, n_classes, h_dim=1024):
         super(WavClassifier, self).__init__()
         
+        # (1, 65536)
         self.encode = nn.Sequential(
-            nn.Conv1d(1, 64, kernel_size=1024, stride=256, padding=384),
-            nn.ReLU(),
-            nn.BatchNorm1d(64),
-
-            nn.Conv1d(64, 64, kernel_size=4, stride=2, padding=1),
-            nn.ReLU(),
-            nn.BatchNorm1d(64),
-
-            nn.Conv1d(64, 64, kernel_size=4, stride=2, padding=1),
-            nn.ReLU(),
-            nn.BatchNorm1d(64),
-
-            nn.Conv1d(64, 128, kernel_size=4, stride=2, padding=1),
+            nn.Conv1d(1, 128, kernel_size=9, stride=4, padding=4),
             nn.ReLU(),
             nn.BatchNorm1d(128),
 
-            nn.Conv1d(128, 128, kernel_size=4, stride=2, padding=1),
+            nn.Conv1d(128, 128, kernel_size=9, stride=4, padding=4),
             nn.ReLU(),
             nn.BatchNorm1d(128),
 
-            nn.Conv1d(128, 256, kernel_size=4, stride=2, padding=1),
+            nn.Conv1d(128, 128, kernel_size=9, stride=4, padding=4),
+            nn.ReLU(),
+            nn.BatchNorm1d(128),
+
+            nn.Conv1d(128, 256, kernel_size=9, stride=4, padding=4),
+            nn.ReLU(),
+            nn.BatchNorm1d(256),
+
+            nn.Conv1d(256, 256, kernel_size=4, stride=2, padding=1),
             nn.ReLU(),
             nn.BatchNorm1d(256),
 
@@ -85,52 +82,26 @@ class WavClassifier(nn.Module):
             nn.ReLU(),
             nn.BatchNorm1d(512),
 
-            nn.Conv1d(512, h_dim, kernel_size=4, stride=2, padding=1),
+            nn.Conv1d(512, 512, kernel_size=4, stride=2, padding=1),
+            nn.ReLU(),
+            nn.BatchNorm1d(512),
+
+            nn.Conv1d(512, 512, kernel_size=4, stride=2, padding=1),
+            nn.ReLU(),
+            nn.BatchNorm1d(512),
+
+            nn.Conv1d(512, 1024, kernel_size=4, stride=2, padding=1),
+            nn.ReLU(),
+            nn.BatchNorm1d(1024),
+
+            nn.Conv1d(1024, 1024, kernel_size=4, stride=2, padding=1),
+            nn.ReLU(),
+            nn.BatchNorm1d(1024),
+
+            nn.Conv1d(1024, h_dim, kernel_size=4, stride=2, padding=1),
             nn.ReLU(),
             nn.BatchNorm1d(h_dim),
         )
-        
-#         # (1, 1, 64000)
-#         self.feature_extractor = nn.Sequential(
-#             nn.Conv1d(1, 128, kernel_size=1024, stride=494),
-#             nn.ReLU(),
-#             nn.BatchNorm1d(128)
-#         )
-        
-#         # (1, 128, 128)
-#         self.encoder = nn.Sequential(
-#             nn.Conv2d(1, 64, 4, padding=1, stride=(2, 2)),
-#             nn.ReLU(),
-#             nn.BatchNorm2d(64),
-            
-#             nn.Conv2d(64, 64, 4, padding=1, stride=(2, 2)),
-#             nn.ReLU(),
-#             nn.BatchNorm2d(64),
-            
-#             nn.Conv2d(64, 128, 4, padding=1, stride=(2, 2)),
-#             nn.ReLU(),
-#             nn.BatchNorm2d(128),
-            
-#             nn.Conv2d(128, 128, 4, padding=1, stride=(2, 2)),
-#             nn.ReLU(),
-#             nn.BatchNorm2d(128),
-            
-#             nn.Conv2d(128, 256, 4, padding=1, stride=(2, 2)),
-#             nn.ReLU(),
-#             nn.BatchNorm2d(256),
-            
-#             nn.Conv2d(256, 256, 4, padding=1, stride=(2, 2)),
-#             nn.ReLU(),
-#             nn.BatchNorm2d(256),
-            
-#             nn.Conv2d(256, 512, 4, padding=1, stride=(2, 2)),
-#             nn.ReLU(),
-#             nn.BatchNorm2d(512),
-            
-#             nn.Conv2d(512, h_dim, 1, stride=1),
-#             nn.ReLU(),
-#             nn.BatchNorm2d(h_dim)
-#         )
 
         self.out = nn.Linear(h_dim, n_classes, bias=True)
         
@@ -140,20 +111,12 @@ class WavClassifier(nn.Module):
         return self.out(h)
 
 class Autoencoder(nn.Module):
-    def __init__(self, h_dim=512):
+    def __init__(self, h_dim=1024):
         super(Autoencoder, self).__init__()
         
         # (1, 128, 128)
         self.encode = nn.Sequential(
-            nn.Conv2d(1, 64, 4, padding=1, stride=(2, 2)),
-            nn.ReLU(),
-            nn.BatchNorm2d(64),
-            
-            nn.Conv2d(64, 64, 4, padding=1, stride=(2, 2)),
-            nn.ReLU(),
-            nn.BatchNorm2d(64),
-            
-            nn.Conv2d(64, 128, 4, padding=1, stride=(2, 2)),
+            nn.Conv2d(1, 128, 4, padding=1, stride=(2, 2)),
             nn.ReLU(),
             nn.BatchNorm2d(128),
             
@@ -173,13 +136,29 @@ class Autoencoder(nn.Module):
             nn.ReLU(),
             nn.BatchNorm2d(512),
             
-            nn.Conv2d(512, h_dim, 1, stride=1),
+            nn.Conv2d(512, 512, 4, padding=1, stride=(2, 2)),
+            nn.ReLU(),
+            nn.BatchNorm2d(512),
+            
+            nn.Conv2d(512, 1024, 4, padding=1, stride=(2, 2)),
+            nn.ReLU(),
+            nn.BatchNorm2d(1024),
+            
+            nn.Conv2d(1024, h_dim, 1, stride=1),
             nn.ReLU(),
             nn.BatchNorm2d(h_dim)
         )
 
         self.decode = nn.Sequential(
-            nn.ConvTranspose2d(h_dim, 512, 1, stride=1),
+            nn.ConvTranspose2d(h_dim, 1024, 1, stride=1),
+            nn.ReLU(),
+            nn.BatchNorm2d(1024),
+            
+            nn.ConvTranspose2d(1024, 512, 4, padding=1, stride=2),
+            nn.ReLU(),
+            nn.BatchNorm2d(512),
+            
+            nn.ConvTranspose2d(512, 512, 4, padding=1, stride=2),
             nn.ReLU(),
             nn.BatchNorm2d(512),
             
@@ -199,15 +178,115 @@ class Autoencoder(nn.Module):
             nn.ReLU(),
             nn.BatchNorm2d(128),
             
-            nn.ConvTranspose2d(128, 64, 4, padding=1, stride=2),
+            nn.ConvTranspose2d(128, 1, 4, padding=1, stride=2),
+            nn.Sigmoid()
+        )
+        
+    def forward(self, x):
+        h = self.encode(x)
+        return self.decode(h)
+    
+class WavAutoencoder(nn.Module):
+    def __init__(self, h_dim=1024):
+        super(WavAutoencoder, self).__init__()
+        
+        # (1, 65536)
+        self.encode = nn.Sequential(
+            nn.Conv1d(1, 128, kernel_size=9, stride=4, padding=4),
             nn.ReLU(),
-            nn.BatchNorm2d(64),
-            
-            nn.ConvTranspose2d(64, 64, 4, padding=1, stride=2),
+            nn.BatchNorm1d(128),
+
+            nn.Conv1d(128, 128, kernel_size=9, stride=4, padding=4),
             nn.ReLU(),
-            nn.BatchNorm2d(64),
-            
-            nn.ConvTranspose2d(64, 1, 4, padding=1, stride=2),
+            nn.BatchNorm1d(128),
+
+            nn.Conv1d(128, 128, kernel_size=9, stride=4, padding=4),
+            nn.ReLU(),
+            nn.BatchNorm1d(128),
+
+            nn.Conv1d(128, 256, kernel_size=9, stride=4, padding=4),
+            nn.ReLU(),
+            nn.BatchNorm1d(256),
+
+            nn.Conv1d(256, 256, kernel_size=4, stride=2, padding=1),
+            nn.ReLU(),
+            nn.BatchNorm1d(256),
+
+            nn.Conv1d(256, 256, kernel_size=4, stride=2, padding=1),
+            nn.ReLU(),
+            nn.BatchNorm1d(256),
+
+            nn.Conv1d(256, 512, kernel_size=4, stride=2, padding=1),
+            nn.ReLU(),
+            nn.BatchNorm1d(512),
+
+            nn.Conv1d(512, 512, kernel_size=4, stride=2, padding=1),
+            nn.ReLU(),
+            nn.BatchNorm1d(512),
+
+            nn.Conv1d(512, 512, kernel_size=4, stride=2, padding=1),
+            nn.ReLU(),
+            nn.BatchNorm1d(512),
+
+            nn.Conv1d(512, 1024, kernel_size=4, stride=2, padding=1),
+            nn.ReLU(),
+            nn.BatchNorm1d(1024),
+
+            nn.Conv1d(1024, 1024, kernel_size=4, stride=2, padding=1),
+            nn.ReLU(),
+            nn.BatchNorm1d(1024),
+
+            nn.Conv1d(1024, h_dim, kernel_size=4, stride=2, padding=1),
+            nn.ReLU(),
+            nn.BatchNorm1d(h_dim),
+        )
+
+        self.decode = nn.Sequential(
+            nn.ConvTranspose1d(h_dim, 1024, 4, padding=1, stride=2),
+            nn.ReLU(),
+            nn.BatchNorm1d(1024),
+
+            nn.ConvTranspose1d(1024, 1024, 4, padding=1, stride=2),
+            nn.ReLU(),
+            nn.BatchNorm1d(1024),
+
+            nn.ConvTranspose1d(1024, 512, 4, padding=1, stride=2),
+            nn.ReLU(),
+            nn.BatchNorm1d(512),
+
+            nn.ConvTranspose1d(512, 512, 4, padding=1, stride=2),
+            nn.ReLU(),
+            nn.BatchNorm1d(512),
+
+            nn.ConvTranspose1d(512, 512, 4, padding=1, stride=2),
+            nn.ReLU(),
+            nn.BatchNorm1d(512),
+
+            nn.ConvTranspose1d(512, 256, 4, padding=1, stride=2),
+            nn.ReLU(),
+            nn.BatchNorm1d(256),
+
+            nn.ConvTranspose1d(256, 256, 4, padding=1, stride=2),
+            nn.ReLU(),
+            nn.BatchNorm1d(256),
+
+            nn.ConvTranspose1d(256, 256, 4, padding=1, stride=2),
+            nn.ReLU(),
+            nn.BatchNorm1d(256),
+
+            nn.ConvTranspose1d(256, 128, 8, padding=2, stride=4),
+            nn.ReLU(),
+            nn.BatchNorm1d(128),
+
+            nn.ConvTranspose1d(128, 128, 8, padding=2, stride=4),
+            nn.ReLU(),
+            nn.BatchNorm1d(128),
+
+            nn.ConvTranspose1d(128, 128, 8, padding=2, stride=4),
+            nn.ReLU(),
+            nn.BatchNorm1d(128),
+
+            nn.ConvTranspose1d(128, 1, 8, padding=2, stride=4),
             nn.Sigmoid()
         )
         
