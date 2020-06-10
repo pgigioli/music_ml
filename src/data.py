@@ -4,6 +4,8 @@ import numpy as np
 import boto3
 import json
 import io
+import torch
+import torchaudio
 import sklearn
 import scipy.io.wavfile as sciwav
 from skimage.transform import resize
@@ -12,7 +14,7 @@ from torch.utils.data import Dataset
 
 class NSynthDataset(Dataset):
     def __init__(self, nsynth_path, s3_bucket=None, instrument_source=(0, 1, 2), feature_type='mfcc', scaling=None, include_meta=False,
-                 resize=None, remove_synth_lead=False, n_samples_per_class=None):
+                 resize=None, mu_law_companding=False, remove_synth_lead=False, n_samples_per_class=None):
         if scaling not in [None, 'standardize', 'normalize']:
             raise Exception('scaling must be one of: None, "standardize", or "normalize"')
         
@@ -22,6 +24,7 @@ class NSynthDataset(Dataset):
         self.scaling = scaling
         self.include_meta = include_meta
         self.resize = resize
+        self.mu_law_companding = mu_law_companding
         
         if resize and type(resize) != tuple:
             raise Exception('resize must be tuple')
@@ -73,6 +76,8 @@ class NSynthDataset(Dataset):
             sample_rate, X = sciwav.read(os.path.join(self.nsynth_path, 'audio/{}'.format(wav_fname)))
         X = X.astype(np.float32)
 
+        if self.mu_law_companding:
+            X = torchaudio.transforms.MuLawEncoding()(torch.tensor(X, dtype=torch.float32)).numpy().astype(np.float32)
 
         if self.feature_type == 'mfcc':
             features = librosa.feature.mfcc(y=X, sr=sample_rate, n_mfcc=40)
