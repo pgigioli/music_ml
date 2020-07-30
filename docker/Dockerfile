@@ -9,7 +9,9 @@ ARG PROJECT=music_ml
 RUN apt-get update && apt-get install -y \
   nano \
   htop \
-  libsndfile1
+  libsndfile1 \
+  wget \
+  unzip
 
 # Upgrade pip
 RUN pip install --upgrade pip

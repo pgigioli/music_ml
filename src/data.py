@@ -6,7 +6,9 @@ import boto3
 import json
 import io
 import sklearn
+import pandas as pd
 import scipy.io.wavfile as sciwav
+from sklearn.model_selection import train_test_split
 
 import torch
 import torchvision
@@ -119,13 +121,15 @@ class RandomMask:
             
         return x.index_fill_(self.dim, mask_range, val)
     
-def create_audio_transform(sample_rate, n_samples, random_crop=False, feature_type='mel', resize=None, normalize=False, 
+def create_audio_transform(sample_rate, n_samples=None, random_crop=False, feature_type='mel', resize=None, normalize=False, 
                            standardize=False, standardize_mean=None, standardize_std=None, spec_augment=False):
     transform = [
-        Mono(),
-        TimeCrop(n_samples, random=random_crop), 
-        TimePad(n_samples)
+        Mono()
     ]
+    
+    if n_samples:
+        transform.append(TimeCrop(n_samples, random=random_crop))
+        transform.append(TimePad(n_samples))
     
     if feature_type == 'mel':
         transform.append(torchaudio.transforms.MelSpectrogram(
@@ -158,8 +162,8 @@ def create_audio_transform(sample_rate, n_samples, random_crop=False, feature_ty
         
     return torchvision.transforms.Compose(transform)
 
-class NSynthDataset(Dataset):
-    def __init__(self, nsynth_path, s3_bucket=None, include_meta=False, instrument_source=(0, 1, 2), sample_rate=16000, n_samples=64000, 
+class NSynth(Dataset):
+    def __init__(self, nsynth_path, split, s3_bucket=None, include_meta=False, instrument_source=(0, 1, 2), sample_rate=16000, n_samples=64000, 
                  feature_type='mel', random_crop=False, resize=None, normalize=False, standardize=False, standardize_mean=None, standardize_std=None, 
                  spec_augment=False, remove_synth_lead=False, n_samples_per_class=None):
         self.nsynth_path = nsynth_path
@@ -181,15 +185,22 @@ class NSynthDataset(Dataset):
         
         if self.resize and type(self.resize) != tuple:
             raise Exception('resize must be tuple')
+            
+        if split not in ['train', 'val', 'test']:
+            raise Exception('split must be one of: train, val, test')
+            
+        if split == 'val': split = 'valid'
+            
+        self.data_dir = os.path.join(self.nsynth_path, 'nsynth-{}'.format(split))
         
         if self.s3_bucket:
             self.s3_client = boto3.client('s3')
             self.s3_resource = boto3.resource('s3')
         
-            meta_obj = self.s3_client.get_object(Bucket=self.s3_bucket, Key=os.path.join(self.nsynth_path, 'examples.json'))
+            meta_obj = self.s3_client.get_object(Bucket=self.s3_bucket, Key=os.path.join(self.data_dir, 'examples.json'))
             meta = json.loads(meta_obj['Body'].read().decode('utf-8'))
         else:
-            with open(os.path.join(self.nsynth_path, 'examples.json'), 'r') as read_file:
+            with open(os.path.join(self.data_dir, 'examples.json'), 'r') as read_file:
                 meta = json.load(read_file)
         
         self.meta = {}
@@ -208,10 +219,11 @@ class NSynthDataset(Dataset):
             self.meta[k] = v
             
         self.files = list(self.meta.keys())
+        self.files = [os.path.join(self.data_dir, 'audio/{}.wav'.format(x)) for x in self.files]
         
         self.transform = create_audio_transform(
             self.sample_rate,
-            self.n_samples,
+            n_samples=self.n_samples,
             random_crop=self.random_crop,
             feature_type=self.feature_type,
             resize=self.resize,
@@ -226,7 +238,7 @@ class NSynthDataset(Dataset):
         return len(self.files)
 
     def __getitem__(self, idx):
-        wav_fname = self.files[idx] + '.wav'
+        wav_fname = self.files[idx]
         features = self.extract_features(wav_fname)
         
         if self.include_meta:
@@ -236,14 +248,266 @@ class NSynthDataset(Dataset):
     
     def extract_features(self, wav_fname):
         if self.s3_bucket:
-            obj = self.s3_resource.Object(self.s3_bucket, os.path.join(self.nsynth_path, 'audio/{}'.format(wav_fname)))
+            obj = self.s3_resource.Object(self.s3_bucket, wav_fname)
             sample_rate, audio = sciwav.read(io.BytesIO(obj.get()['Body'].read()))
             audio = torch.tensor(audio, dtype=torch.float32)
             
             if sample_rate != self.sample_rate:
                 audio = torchaudio.transforms.Resample(sample_rate, self.sample_rate)(audio)
         else:
-            audio = load_audio(os.path.join(self.nsynth_path, 'audio/{}'.format(wav_fname)), sample_rate=self.sample_rate)
+            audio = load_audio(wav_fname, sample_rate=self.sample_rate)
     
         features = self.transform(audio)
         return features
+    
+class Freesound(Dataset):
+    def __init__(self, freesound_dir, split, binary=False, sample_rate=16000, n_samples=64000, random_crop=False, feature_type='mel', 
+                 resize=None, normalize=False, standardize=False, standardize_mean=None, standardize_std=None, spec_augment=False, 
+                 val_split=0.1, random_state=0, no_label=False):
+        
+        self.freesound_dir = freesound_dir
+        self.split = split
+        self.binary = binary
+        self.sample_rate = sample_rate
+        self.n_samples = n_samples
+        self.random_crop = random_crop
+        self.feature_type = feature_type
+        self.resize = resize
+        self.normalize = normalize
+        self.standardize = standardize
+        self.standardize_mean = standardize_mean
+        self.standardize_std = standardize_std
+        self.spec_augment = spec_augment
+        self.val_split = val_split
+        self.no_label = no_label
+
+        if resize and type(resize) != tuple:
+            raise Exception('resize must be tuple')
+        
+        if (split == 'train') or (split == 'val'):
+            self.data_dir = os.path.join(freesound_dir, 'FSDKaggle2018.audio_train')
+            self.meta = pd.read_csv(os.path.join(freesound_dir, 'FSDKaggle2018.meta/train_post_competition.csv'))
+            
+            if split == 'train':
+                self.meta, _ = train_test_split(self.meta, test_size=val_split, random_state=random_state)
+            else:
+                _, self.meta = train_test_split(self.meta, test_size=val_split, random_state=random_state)
+                
+            self.meta = self.meta.reset_index(drop=True)
+        elif split == 'test':
+            self.data_dir = os.path.join(freesound_dir, 'FSDKaggle2018.audio_test')
+            self.meta = pd.read_csv(os.path.join(freesound_dir, 'FSDKaggle2018.meta/test_post_competition_scoring_clips.csv'))
+        else:
+            raise Exception('split must be train, val, or test')
+            
+        self.meta['fname'] = self.meta['fname'].apply(lambda x : os.path.join(self.data_dir, x))
+            
+        if self.binary:
+            instruments = [
+                'Acoustic_guitar', 'Violin_or_fiddle', 'Trumpet', 'Cello', 'Double_bass', 'Saxophone', 'Clarinet',
+                'Bass_drum', 'Flute', 'Hi-hat', 'Snare_drum', 'Oboe', 'Gong', 'Tambourine', 'Cowbell', 'Harmonica',
+                'Electric_piano', 'Chime', 'Glockenspiel'
+            ]
+            
+            self.meta['label'] = self.meta['label'].apply(lambda x : 'instrument' if x in instruments else 'non_instrument')
+            
+        self.transform = create_audio_transform(
+            self.sample_rate,
+            n_samples=self.n_samples,
+            random_crop=self.random_crop,
+            feature_type=self.feature_type,
+            resize=self.resize,
+            normalize=self.normalize,
+            standardize=self.standardize,
+            standardize_mean=self.standardize_mean,
+            standardize_std=self.standardize_std,
+            spec_augment=self.spec_augment
+        )
+
+    def __len__(self):
+        return len(self.meta)
+
+    def __getitem__(self, idx):
+        wav_fname = self.meta.iloc[idx]['fname']
+        features = self.extract_features(wav_fname)
+        
+        if self.no_label:
+            return features
+        else:
+            return features, self.meta.iloc[idx]['label']
+        
+    def extract_features(self, wav_fname):
+        audio = load_audio(wav_fname, sample_rate=self.sample_rate)
+    
+        features = self.transform(audio)
+        return features
+    
+class TUTAcousticScenes(Dataset):
+    def __init__(self, data_dir, split, sample_rate=16000, n_samples=160000, random_crop=False, feature_type='mel', resize=None,
+                 normalize=False, standardize=False, standardize_mean=None, standardize_std=None, spec_augment=False, no_label=False):
+        self.split = split
+        self.sample_rate = sample_rate
+        self.n_samples = n_samples
+        self.random_crop = random_crop
+        self.feature_type = feature_type
+        self.resize = resize
+        self.normalize = normalize
+        self.standardize = standardize
+        self.standardize_mean = standardize_mean
+        self.standardize_std = standardize_std
+        self.spec_augment = spec_augment
+        self.no_label = no_label
+        
+        if resize and type(resize) != tuple:
+            raise Exception('resize must be tuple')
+        
+        if split == 'train':
+            self.data_dir = os.path.join(data_dir, 'TUT-urban-acoustic-scenes-2018-development')
+            self.meta = pd.read_csv(os.path.join(self.data_dir, 'meta.csv'), delimiter='\t')
+            
+            # remove broken file
+            idx = self.meta[self.meta['filename'] == 'audio/airport-london-5-226-a.wav'].index
+            self.meta = self.meta.drop(idx).reset_index(drop=True)
+            
+            self.meta['filename'] = self.meta['filename'].apply(lambda x : os.path.join(self.data_dir, x))
+        elif split == 'val':
+            self.data_dir = os.path.join(data_dir, 'TUT-urban-acoustic-scenes-2018-evaluation')
+        elif split == 'test':
+            self.data_dir = os.path.join(data_dir, 'TUT-urban-acoustic-scenes-2018-leaderboard')
+        else:
+            raise Exception('split must be train, val, or test') 
+            
+        if split == 'val' or split == 'test':
+            audio_dir = os.path.join(self.data_dir, 'audio')
+            self.meta = pd.DataFrame([
+                {'filename' : f, 'scene_label' : None, 'identifier' : None, 'source_label' : None} 
+                for f in os.listdir(audio_dir)
+                
+            ])
+            self.meta['filename'] = self.meta['filename'].apply(lambda x : os.path.join(audio_dir, x))
+            
+            
+        self.transform = create_audio_transform(
+            self.sample_rate,
+            n_samples=self.n_samples,
+            random_crop=self.random_crop,
+            feature_type=self.feature_type,
+            resize=self.resize,
+            normalize=self.normalize,
+            standardize=self.standardize,
+            standardize_mean=self.standardize_mean,
+            standardize_std=self.standardize_std,
+            spec_augment=self.spec_augment
+        )
+        
+    def __len__(self):
+        return len(self.meta)
+
+    def __getitem__(self, idx):
+        wav_fname = self.meta.iloc[idx]['filename']
+        features = self.extract_features(wav_fname)
+        
+        if self.no_label:
+            return features
+        else:
+            return features, self.meta.iloc[idx]['scene_label']
+        
+    def extract_features(self, wav_fname):
+        audio = load_audio(wav_fname, sample_rate=self.sample_rate)
+    
+        features = self.transform(audio)
+        return features
+    
+class AcousticSceneMusicSegmentation(Dataset):
+    def __init__(
+        self, tut_dir, nsynth_dir, split, freesound_dir=None, sample_rate=16000, n_samples=160000, random_crop=False, feature_type='mel',
+        resize=None, normalize=False, standardize=False, standardize_mean=None, standardize_std=None, spec_augment=False, random_volume_reduction=False
+    ):
+        self.tut_dir = tut_dir
+        self.freesound_dir = freesound_dir
+        self.nsynth_dir = nsynth_dir
+        self.split = split
+        self.sample_rate = sample_rate
+        self.n_samples = n_samples
+        self.random_crop = random_crop
+        self.feature_type = feature_type
+        self.resize = resize
+        self.normalize = normalize
+        self.standardize = standardize
+        self.standardize_mean = standardize_mean
+        self.standardize_std = standardize_std
+        self.spec_augment = spec_augment
+        self.random_volume_reduction = random_volume_reduction
+        
+        tut_dataset = TUTAcousticScenes(self.tut_dir, self.split)
+        nsynth_dataset = NSynth(nsynth_dir, self.split)
+        
+        self.scene_files = tut_dataset.meta['filename'].tolist()
+        self.music_files = nsynth_dataset.files
+        
+        if self.freesound_dir:
+            freesound_dataset = Freesound(self.freesound_dir, self.split, binary=True)
+            music_meta = freesound_dataset.meta[freesound_dataset.meta['label'] == 'instrument'].reset_index(drop=True)
+            self.music_files += music_meta['fname'].tolist()
+        
+        self.transform = create_audio_transform(
+            self.sample_rate,
+            n_samples=self.n_samples,
+            random_crop=self.random_crop,
+            feature_type=self.feature_type,
+            resize=self.resize,
+            normalize=self.normalize,
+            standardize=self.standardize,
+            standardize_mean=self.standardize_mean,
+            standardize_std=self.standardize_std,
+            spec_augment=self.spec_augment
+        )
+        
+    def __len__(self):
+        return len(self.scene_files)
+
+    def __getitem__(self, idx):
+        scene_fname = self.scene_files[idx]
+        music_fname = random.choice(self.music_files)
+        
+        audio, start, end = self.combine_audio(scene_fname, music_fname, random_volume_reduction=self.random_volume_reduction)
+        features = self.transform(audio)
+        
+        # create segmentation mask
+        scale = (features.shape[-1] / audio.shape[-1])
+        start = int(scale*start)
+        end = int(scale*end)
+        mask = torch.zeros(features.shape[-1], device=features.device, dtype=torch.float32)
+        mask[start:end] = 1.0
+        
+        return features, mask
+    
+    def combine_audio(self, scene_fname, music_fname, random_volume_reduction=False):
+        scene = load_audio(scene_fname, sample_rate=self.sample_rate)
+        music = load_audio(music_fname, sample_rate=self.sample_rate)
+        
+        # convert to mono
+        scene = scene.mean(0, keepdim=True)
+        music = music.mean(0, keepdim=True)
+        
+        # trim leading/trailing zeros from music audio
+        music = torch.from_numpy(np.trim_zeros(music.squeeze().numpy())).unsqueeze(0)
+        
+        # truncate music audio if longer than scene audio
+        if music.shape[-1] > (scene.shape[-1] - self.sample_rate*2):
+            music = music[..., :scene.shape[-1] - self.sample_rate*2]
+            
+        # normalize music volume to match scene volume
+        music = (((music - music.min()) * (scene.max() - scene.min())) / (music.max() - music.min())) + scene.min()
+        
+        # change volume of music by random factor (1 - 4)
+        if random_volume_reduction:
+            factor = random.random()*3 + 1.0
+            music /= factor
+        
+        # insert music into scene
+        start = random.randint(0, scene.shape[-1] - music.shape[-1] - 1)
+        end = start+music.shape[-1]
+        scene[..., start:end] += music
+        
+        return scene, start, end

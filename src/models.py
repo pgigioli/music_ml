@@ -2,12 +2,24 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+class GlobalAvg1D(nn.Module):
+    def __init__(self, dim):
+        super(GlobalAvg1D, self).__init__()
+        
+        self.dim = dim
+    
+    def __call__(self, tensor):
+        if len(tensor.shape) != 4:
+            raise Exception('tensor must be rank of 4')
+            
+        return tensor.mean(self.dim, keepdim=True)
+
 class GlobalAvg2D(nn.Module):
     def __call__(self, tensor):
         if len(tensor.shape) != 4:
             raise Exception('tensor must be rank of 4')
             
-        return tensor.mean([2, 3]).unsqueeze(-1).unsqueeze(-1)
+        return tensor.mean([2, 3], keepdim=True)
     
 class Classifier(nn.Module):
     def __init__(self, n_classes, h_dim=512):
@@ -18,7 +30,8 @@ class Classifier(nn.Module):
         
         # (1, 128, 251)
         self.encode = nn.Sequential(
-            nn.Conv2d(1, 64, (3, 4), padding=(1, 4), stride=1),
+#             nn.Conv2d(1, 64, (3, 4), padding=(1, 4), stride=1),
+            nn.Conv2d(1, 64, 3, padding=1, stride=1),
             nn.ReLU(),
             nn.BatchNorm2d(64),
             nn.MaxPool2d(2, stride=2),
@@ -61,51 +74,62 @@ class Classifier(nn.Module):
         h = h.view(h.size(0), -1)
         return self.out(h)
 
-# class Classifier(nn.Module):
-#     def __init__(self, n_classes, h_dim=1024):
-#         super(Classifier, self).__init__()
+class Segmenter1d(nn.Module):
+    def __init__(self, h_dim=512, sigmoid=True):
+        super(Segmenter1d, self).__init__()
         
-#         # (1, 128, 128)
-#         self.encode = nn.Sequential(
-#             nn.Conv2d(1, 128, 4, padding=1, stride=(2, 2)),
-#             nn.ReLU(),
-#             nn.BatchNorm2d(128),
-            
-#             nn.Conv2d(128, 128, 4, padding=1, stride=(2, 2)),
-#             nn.ReLU(),
-#             nn.BatchNorm2d(128),
-            
-#             nn.Conv2d(128, 256, 4, padding=1, stride=(2, 2)),
-#             nn.ReLU(),
-#             nn.BatchNorm2d(256),
-            
-#             nn.Conv2d(256, 256, 4, padding=1, stride=(2, 2)),
-#             nn.ReLU(),
-#             nn.BatchNorm2d(256),
-            
-#             nn.Conv2d(256, 512, 4, padding=1, stride=(2, 2)),
-#             nn.ReLU(),
-#             nn.BatchNorm2d(512),
-            
-#             nn.Conv2d(512, 512, 4, padding=1, stride=(2, 2)),
-#             nn.ReLU(),
-#             nn.BatchNorm2d(512),
-            
-#             nn.Conv2d(512, 1024, 4, padding=1, stride=(2, 2)),
-#             nn.ReLU(),
-#             nn.BatchNorm2d(1024),
-            
-#             nn.Conv2d(1024, h_dim, 1, stride=1),
-#             nn.ReLU(),
-#             nn.BatchNorm2d(h_dim)
-#         )
-
-#         self.out = nn.Linear(h_dim, n_classes, bias=True)
+        self.h_dim = h_dim
+        self.sigmoid = sigmoid
         
-#     def forward(self, x):
-#         h = self.encode(x)
-#         h = h.view(h.size(0), -1)
-#         return self.out(h)
+        # (1, 128, 251)
+        self.encode = nn.Sequential(
+            nn.Conv2d(1, 64, 3, padding=1, stride=1),
+            nn.ReLU(),
+            nn.BatchNorm2d(64),
+            nn.MaxPool2d((2, 1), stride=(2, 1)),
+            
+            nn.Conv2d(64, 64, 3, padding=1, stride=1),
+            nn.ReLU(),
+            nn.BatchNorm2d(64),
+            nn.MaxPool2d((2, 1), stride=(2, 1)),
+            
+            nn.Conv2d(64, 128, 3, padding=1, stride=1),
+            nn.ReLU(),
+            nn.BatchNorm2d(128),
+            nn.MaxPool2d((2, 1), stride=(2, 1)),
+            
+            nn.Conv2d(128, 128, 3, padding=1, stride=1),
+            nn.ReLU(),
+            nn.BatchNorm2d(128),
+            nn.MaxPool2d((2, 1), stride=(2, 1)),
+            
+            nn.Conv2d(128, 256, 3, padding=1, stride=1),
+            nn.ReLU(),
+            nn.BatchNorm2d(256),
+            nn.MaxPool2d((2, 1), stride=(2, 1)),
+            
+            nn.Conv2d(256, 256, 3, padding=1, stride=1),
+            nn.ReLU(),
+            nn.BatchNorm2d(256),
+            nn.MaxPool2d((2, 1), stride=(2, 1)),
+            
+            nn.Conv2d(256, h_dim, 3, padding=1, stride=1),
+            nn.ReLU(),
+            nn.BatchNorm2d(h_dim),
+            GlobalAvg1D(-2)
+        )
+        
+        self.out = nn.Conv2d(h_dim, 1, (1, 1))
+        
+    def forward(self, x):
+        h = self.encode(x)
+        outputs = self.out(h)
+        outputs = outputs.view(outputs.shape[0], -1)
+        
+        if self.sigmoid:
+            return torch.sigmoid(outputs)
+        else:
+            return outputs
     
 class WavClassifier(nn.Module):
     def __init__(self, n_classes, h_dim=1024):
@@ -177,35 +201,35 @@ class Autoencoder(nn.Module):
         
         # (1, 128, 251)
         self.encode = nn.Sequential(
-            nn.Conv2d(1, 64, (3, 4), padding=(1, 4), stride=1),
+            nn.Conv2d(1, 64, (3, 4), padding=(1, 4), stride=2),
             nn.ReLU(),
             nn.BatchNorm2d(64),
-            nn.MaxPool2d(2, stride=2),
+#             nn.MaxPool2d(2, stride=2),
             
-            nn.Conv2d(64, 64, 3, padding=1, stride=1),
+            nn.Conv2d(64, 64, 3, padding=1, stride=2),
             nn.ReLU(),
             nn.BatchNorm2d(64),
-            nn.MaxPool2d(2, stride=2),
+#             nn.MaxPool2d(2, stride=2),
             
-            nn.Conv2d(64, 128, 3, padding=1, stride=1),
+            nn.Conv2d(64, 128, 3, padding=1, stride=2),
             nn.ReLU(),
             nn.BatchNorm2d(128),
-            nn.MaxPool2d(2, stride=2),
+#             nn.MaxPool2d(2, stride=2),
             
-            nn.Conv2d(128, 128, 3, padding=1, stride=1),
+            nn.Conv2d(128, 128, 3, padding=1, stride=2),
             nn.ReLU(),
             nn.BatchNorm2d(128),
-            nn.MaxPool2d(2, stride=2),
+#             nn.MaxPool2d(2, stride=2),
             
-            nn.Conv2d(128, 256, 3, padding=1, stride=1),
+            nn.Conv2d(128, 256, 3, padding=1, stride=2),
             nn.ReLU(),
             nn.BatchNorm2d(256),
-            nn.MaxPool2d(2, stride=2),
+#             nn.MaxPool2d(2, stride=2),
             
-            nn.Conv2d(256, 256, 3, padding=1, stride=1),
+            nn.Conv2d(256, 256, 3, padding=1, stride=2),
             nn.ReLU(),
             nn.BatchNorm2d(256),
-            nn.MaxPool2d(2, stride=2),
+#             nn.MaxPool2d(2, stride=2),
             
             nn.Conv2d(256, 512, (2, 4), padding=0, stride=1),
             nn.ReLU(),
