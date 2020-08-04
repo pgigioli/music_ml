@@ -83,37 +83,37 @@ class Segmenter1d(nn.Module):
         
         # (1, 128, 251)
         self.encode = nn.Sequential(
-            nn.Conv2d(1, 64, 3, padding=1, stride=1),
+            nn.Conv2d(1, 64, (3, 7), padding=(1, 3), stride=1),
             nn.ReLU(),
             nn.BatchNorm2d(64),
             nn.MaxPool2d((2, 1), stride=(2, 1)),
             
-            nn.Conv2d(64, 64, 3, padding=1, stride=1),
+            nn.Conv2d(64, 64, (3, 7), padding=(1, 3), stride=1),
             nn.ReLU(),
             nn.BatchNorm2d(64),
             nn.MaxPool2d((2, 1), stride=(2, 1)),
             
-            nn.Conv2d(64, 128, 3, padding=1, stride=1),
+            nn.Conv2d(64, 128, (3, 7), padding=(1, 3), stride=1),
             nn.ReLU(),
             nn.BatchNorm2d(128),
             nn.MaxPool2d((2, 1), stride=(2, 1)),
             
-            nn.Conv2d(128, 128, 3, padding=1, stride=1),
+            nn.Conv2d(128, 128, (3, 7), padding=(1, 3), stride=1),
             nn.ReLU(),
             nn.BatchNorm2d(128),
             nn.MaxPool2d((2, 1), stride=(2, 1)),
             
-            nn.Conv2d(128, 256, 3, padding=1, stride=1),
+            nn.Conv2d(128, 256, (3, 7), padding=(1, 3), stride=1),
             nn.ReLU(),
             nn.BatchNorm2d(256),
             nn.MaxPool2d((2, 1), stride=(2, 1)),
             
-            nn.Conv2d(256, 256, 3, padding=1, stride=1),
+            nn.Conv2d(256, 256, (3, 7), padding=(1, 3), stride=1),
             nn.ReLU(),
             nn.BatchNorm2d(256),
             nn.MaxPool2d((2, 1), stride=(2, 1)),
             
-            nn.Conv2d(256, h_dim, 3, padding=1, stride=1),
+            nn.Conv2d(256, h_dim, (3, 7), padding=(1, 3), stride=1),
             nn.ReLU(),
             nn.BatchNorm2d(h_dim),
             GlobalAvg1D(-2)

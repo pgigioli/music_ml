@@ -123,6 +123,9 @@ class RandomMask:
     
 def create_audio_transform(sample_rate, n_samples=None, random_crop=False, feature_type='mel', resize=None, normalize=False, 
                            standardize=False, standardize_mean=None, standardize_std=None, spec_augment=False):
+    if (type(spec_augment) == str) and (spec_augment not in ['freq', 'time']):
+        raise Exception('spec_augment must be bool or one of: freq, time')
+    
     transform = [
         Mono()
     ]
@@ -156,8 +159,12 @@ def create_audio_transform(sample_rate, n_samples=None, random_crop=False, featu
 #     if image_time_pad:
 #         transform.append(TimePad(image_time_pad, pad_val='min'))
         
-    if spec_augment:
+    if spec_augment == True:
         transform.append(RandomMask(10, -2))
+        transform.append(RandomMask(10, -1))
+    elif spec_augment == 'freq':
+        transform.append(RandomMask(10, -2))
+    elif spec_augment == 'time':
         transform.append(RandomMask(10, -1))
         
     return torchvision.transforms.Compose(transform)
@@ -418,6 +425,94 @@ class TUTAcousticScenes(Dataset):
         features = self.transform(audio)
         return features
     
+class UrbanSED(Dataset):
+    def __init__(self, data_dir, split, sample_rate=16000, n_samples=160000, random_crop=False, feature_type='mel', resize=None,
+                 normalize=False, standardize=False, standardize_mean=None, standardize_std=None, spec_augment=False, no_label=False):
+        self.data_dir = data_dir
+        self.split = split
+        self.sample_rate = sample_rate
+        self.n_samples = n_samples
+        self.random_crop = random_crop
+        self.feature_type = feature_type
+        self.resize = resize
+        self.normalize = normalize
+        self.standardize = standardize
+        self.standardize_mean = standardize_mean
+        self.standardize_std = standardize_std
+        self.spec_augment = spec_augment
+        self.no_label = no_label
+        
+        if resize and type(resize) != tuple:
+            raise Exception('resize must be tuple')
+            
+        if self.split == 'val':
+            key = 'validate'
+        else:
+            key= self.split
+            
+        self.audio_dir = os.path.join(self.data_dir, 'audio/{}'.format(key))
+        self.annotations_dir = os.path.join(self.data_dir, 'annotations/{}'.format(key))
+        self._create_meta()
+            
+        self.transform = create_audio_transform(
+            self.sample_rate,
+            n_samples=self.n_samples,
+            random_crop=self.random_crop,
+            feature_type=self.feature_type,
+            resize=self.resize,
+            normalize=self.normalize,
+            standardize=self.standardize,
+            standardize_mean=self.standardize_mean,
+            standardize_std=self.standardize_std,
+            spec_augment=self.spec_augment
+        )
+        
+    def __len__(self):
+        return len(self.meta)
+
+    def __getitem__(self, idx):
+        wav_fname = self.meta.iloc[idx]['filename']
+        features = self.extract_features(wav_fname)
+        
+        if self.no_label:
+            return features
+        else:
+            return features, self.meta.iloc[idx]['events']
+        
+    def _create_meta(self):
+        self.meta = []
+        for f in os.listdir(self.audio_dir):
+            if f[:2] == '._':
+                continue
+
+            audio_path = os.path.join(self.audio_dir, f)
+            meta_path = f.strip('.wav') + '.jams'
+            meta_path = os.path.join(self.annotations_dir, meta_path)
+
+            annotation = jams.load(meta_path)
+            annotation = annotation.annotations[0]
+
+            events = []
+            for event in annotation.data:
+                if event.value['label'] != 'noise':
+                    events.append({
+                        'label' : event.value['label'],
+                        'start' : event.value['event_time'],
+                        'end' : event.value['event_time'] + event.duration
+                    })
+
+            self.meta.append({
+                'filename' : audio_path,
+                'events' : events
+            })
+        self.meta = pd.DataFrame(self.meta)
+        
+    def extract_features(self, wav_fname):
+        audio = load_audio(wav_fname, sample_rate=self.sample_rate)
+    
+        features = self.transform(audio)
+        return features
+    
 class AcousticSceneMusicSegmentation(Dataset):
     def __init__(
         self, tut_dir, nsynth_dir, split, freesound_dir=None, sample_rate=16000, n_samples=160000, random_crop=False, feature_type='mel',
@@ -498,16 +593,77 @@ class AcousticSceneMusicSegmentation(Dataset):
             music = music[..., :scene.shape[-1] - self.sample_rate*2]
             
         # normalize music volume to match scene volume
-        music = (((music - music.min()) * (scene.max() - scene.min())) / (music.max() - music.min())) + scene.min()
-        
-        # change volume of music by random factor (1 - 4)
         if random_volume_reduction:
-            factor = random.random()*3 + 1.0
-            music /= factor
+            scene_to_music_ratio = random.random()*3 + 1.0
+        else:
+            scene_to_music_ratio = 1.0
+
+        new_max = scene.max() / scene_to_music_ratio
+        new_min = scene.min() / scene_to_music_ratio
+        music = (((music - music.min()) * (new_max - new_min)) / (music.max() - music.min())) + new_min
         
         # insert music into scene
         start = random.randint(0, scene.shape[-1] - music.shape[-1] - 1)
         end = start+music.shape[-1]
-        scene[..., start:end] += music
+        scene[..., start:end] = np.clip(scene[..., start:end] + music, scene.min(), scene.max())
         
         return scene, start, end
+    
+class MusicVsNoise(Dataset):
+    def __init__(self, nsynth_dir, tut_scenes_dir, split, sample_rate=16000, n_samples=64000, random_crop=False, feature_type='mel', resize=None,
+                 normalize=False, standardize=False, standardize_mean=None, standardize_std=None, spec_augment=False):
+        self.nsynth_dir = nsynth_dir
+        self.tut_scenes_dir = tut_scenes_dir
+        self.split = split
+        self.sample_rate = sample_rate
+        self.n_samples = n_samples
+        self.random_crop = random_crop
+        self.feature_type = feature_type
+        self.resize = resize
+        self.normalize = normalize
+        self.standardize = standardize
+        self.standardize_mean = standardize_mean
+        self.standardize_std = standardize_std
+        self.spec_augment = spec_augment
+        
+        if resize and type(resize) != tuple:
+            raise Exception('resize must be tuple')
+            
+        nsynth_dataset = NSynth(self.nsynth_dir, self.split)
+        tut_dataset = TUTAcousticScenes(self.tut_scenes_dir, self.split)
+        
+        self.music_files = nsynth_dataset.files
+        self.noise_files = tut_dataset.meta['filename'].tolist()
+        
+        self.meta = pd.DataFrame()
+        self.meta['filename'] = self.music_files + self.noise_files
+        self.meta['label'] = ['music']*len(self.music_files) + ['noise']*len(self.noise_files)
+        self.meta = self.meta.sample(frac=1).reset_index(drop=True)
+        
+        self.transform = create_audio_transform(
+            self.sample_rate,
+            n_samples=self.n_samples,
+            random_crop=self.random_crop,
+            feature_type=self.feature_type,
+            resize=self.resize,
+            normalize=self.normalize,
+            standardize=self.standardize,
+            standardize_mean=self.standardize_mean,
+            standardize_std=self.standardize_std,
+            spec_augment=self.spec_augment
+        )
+        
+    def __len__(self):
+        return len(self.meta)
+
+    def __getitem__(self, idx):
+        wav_fname = self.meta.iloc[idx]['filename']
+        features = self.extract_features(wav_fname)
+        
+        return features, self.meta.iloc[idx]['label']
+        
+    def extract_features(self, wav_fname):
+        audio = load_audio(wav_fname, sample_rate=self.sample_rate)
+    
+        features = self.transform(audio)
+        return features

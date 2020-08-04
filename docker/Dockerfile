@@ -11,7 +11,8 @@ RUN apt-get update && apt-get install -y \
   htop \
   libsndfile1 \
   wget \
-  unzip
+  unzip \
+  ffmpeg
 
 # Upgrade pip
 RUN pip install --upgrade pip
