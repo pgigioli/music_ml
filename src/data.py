@@ -80,8 +80,14 @@ class Resize:
         return F.interpolate(x.unsqueeze(0), self.size).squeeze(0)
 
 class Normalize:
+    def __init__(self):
+        self.min = None
+        self.max = None
+    
     def __call__(self, x):
-        return (x - x.min()) / (x.max() - x.min())
+        self.min = x.min()
+        self.max = x.max()
+        return (x - self.min) / (self.max - self.min)
 
 class Standardize:
     def __init__(self, mean=None, std=None):
@@ -223,10 +229,10 @@ class NSynth(Dataset):
             if self.n_samples_per_class and (self.class_cts[label] > self.n_samples_per_class):
                 continue
                 
+            k = os.path.join(self.data_dir, 'audio/{}.wav'.format(k))
             self.meta[k] = v
             
         self.files = list(self.meta.keys())
-        self.files = [os.path.join(self.data_dir, 'audio/{}.wav'.format(x)) for x in self.files]
         
         self.transform = create_audio_transform(
             self.sample_rate,
@@ -516,7 +522,8 @@ class UrbanSED(Dataset):
 class AcousticSceneMusicSegmentation(Dataset):
     def __init__(
         self, tut_dir, nsynth_dir, split, freesound_dir=None, sample_rate=16000, n_samples=160000, random_crop=False, feature_type='mel',
-        resize=None, normalize=False, standardize=False, standardize_mean=None, standardize_std=None, spec_augment=False, random_volume_reduction=False
+        resize=None, normalize=False, standardize=False, standardize_mean=None, standardize_std=None, spec_augment=False, random_volume_reduction=False,
+        shuffle_scene=False,
     ):
         self.tut_dir = tut_dir
         self.freesound_dir = freesound_dir
@@ -533,6 +540,7 @@ class AcousticSceneMusicSegmentation(Dataset):
         self.standardize_std = standardize_std
         self.spec_augment = spec_augment
         self.random_volume_reduction = random_volume_reduction
+        self.shuffle_scene = shuffle_scene
         
         tut_dataset = TUTAcousticScenes(self.tut_dir, self.split)
         nsynth_dataset = NSynth(nsynth_dir, self.split)
@@ -548,7 +556,7 @@ class AcousticSceneMusicSegmentation(Dataset):
         self.transform = create_audio_transform(
             self.sample_rate,
             n_samples=self.n_samples,
-            random_crop=self.random_crop,
+            random_crop=False,
             feature_type=self.feature_type,
             resize=self.resize,
             normalize=self.normalize,
@@ -577,6 +585,12 @@ class AcousticSceneMusicSegmentation(Dataset):
         
         return features, mask
     
+    def _shuffle_audio(self, audio, n_parts=4):
+        splits = np.split(audio, sorted(random.sample(range(audio.shape[1]), n_parts-1)), axis=1)
+        random.shuffle(splits)
+        audio = torch.cat(splits, dim=1)
+        return audio
+    
     def combine_audio(self, scene_fname, music_fname, random_volume_reduction=False):
         scene = load_audio(scene_fname, sample_rate=self.sample_rate)
         music = load_audio(music_fname, sample_rate=self.sample_rate)
@@ -584,6 +598,14 @@ class AcousticSceneMusicSegmentation(Dataset):
         # convert to mono
         scene = scene.mean(0, keepdim=True)
         music = music.mean(0, keepdim=True)
+        
+        # apply random crop just to scene
+        if self.random_crop:
+            scene = TimeCrop(self.n_samples, random=True)(scene)
+            
+        # shuffle scene
+        if self.shuffle_scene:
+            scene = self._shuffle_audio(scene, n_parts=4)
         
         # trim leading/trailing zeros from music audio
         music = torch.from_numpy(np.trim_zeros(music.squeeze().numpy())).unsqueeze(0)

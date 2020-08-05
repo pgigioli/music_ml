@@ -204,32 +204,26 @@ class Autoencoder(nn.Module):
             nn.Conv2d(1, 64, (3, 4), padding=(1, 4), stride=2),
             nn.ReLU(),
             nn.BatchNorm2d(64),
-#             nn.MaxPool2d(2, stride=2),
             
             nn.Conv2d(64, 64, 3, padding=1, stride=2),
             nn.ReLU(),
             nn.BatchNorm2d(64),
-#             nn.MaxPool2d(2, stride=2),
             
             nn.Conv2d(64, 128, 3, padding=1, stride=2),
             nn.ReLU(),
             nn.BatchNorm2d(128),
-#             nn.MaxPool2d(2, stride=2),
             
             nn.Conv2d(128, 128, 3, padding=1, stride=2),
             nn.ReLU(),
             nn.BatchNorm2d(128),
-#             nn.MaxPool2d(2, stride=2),
             
             nn.Conv2d(128, 256, 3, padding=1, stride=2),
             nn.ReLU(),
             nn.BatchNorm2d(256),
-#             nn.MaxPool2d(2, stride=2),
             
             nn.Conv2d(256, 256, 3, padding=1, stride=2),
             nn.ReLU(),
             nn.BatchNorm2d(256),
-#             nn.MaxPool2d(2, stride=2),
             
             nn.Conv2d(256, 512, (2, 4), padding=0, stride=1),
             nn.ReLU(),
@@ -279,82 +273,107 @@ class Autoencoder(nn.Module):
             return torch.sigmoid(self.decode(h))
         else:
             return self.decode(h)
-    
-# class Autoencoder(nn.Module):
-#     def __init__(self, h_dim=1024):
-#         super(Autoencoder, self).__init__()
         
-#         # (1, 128, 128)
-#         self.encode = nn.Sequential(
-#             nn.Conv2d(1, 128, 4, padding=1, stride=(2, 2)),
-#             nn.ReLU(),
-#             nn.BatchNorm2d(128),
+class VAE(nn.Module):
+    def __init__(self, h_dim=512, sigmoid=False):
+        super(VAE, self).__init__()
+        
+        self.sigmoid = sigmoid
+        
+        # (1, 128, 251)
+        self.encode = nn.Sequential(
+            nn.Conv2d(1, 64, (3, 4), padding=(1, 4), stride=2),
+            nn.ReLU(),
+            nn.BatchNorm2d(64),
             
-#             nn.Conv2d(128, 128, 4, padding=1, stride=(2, 2)),
-#             nn.ReLU(),
-#             nn.BatchNorm2d(128),
+            nn.Conv2d(64, 64, 3, padding=1, stride=2),
+            nn.ReLU(),
+            nn.BatchNorm2d(64),
             
-#             nn.Conv2d(128, 256, 4, padding=1, stride=(2, 2)),
-#             nn.ReLU(),
-#             nn.BatchNorm2d(256),
+            nn.Conv2d(64, 128, 3, padding=1, stride=2),
+            nn.ReLU(),
+            nn.BatchNorm2d(128),
             
-#             nn.Conv2d(256, 256, 4, padding=1, stride=(2, 2)),
-#             nn.ReLU(),
-#             nn.BatchNorm2d(256),
+            nn.Conv2d(128, 128, 3, padding=1, stride=2),
+            nn.ReLU(),
+            nn.BatchNorm2d(128),
             
-#             nn.Conv2d(256, 512, 4, padding=1, stride=(2, 2)),
-#             nn.ReLU(),
-#             nn.BatchNorm2d(512),
+            nn.Conv2d(128, 256, 3, padding=1, stride=2),
+            nn.ReLU(),
+            nn.BatchNorm2d(256),
             
-#             nn.Conv2d(512, 512, 4, padding=1, stride=(2, 2)),
-#             nn.ReLU(),
-#             nn.BatchNorm2d(512),
+            nn.Conv2d(256, 256, 3, padding=1, stride=2),
+            nn.ReLU(),
+            nn.BatchNorm2d(256),
             
-#             nn.Conv2d(512, 1024, 4, padding=1, stride=(2, 2)),
-#             nn.ReLU(),
-#             nn.BatchNorm2d(1024),
+            nn.Conv2d(256, 512, (2, 4), padding=0, stride=1),
+            nn.ReLU(),
+            nn.BatchNorm2d(512),
             
-#             nn.Conv2d(1024, h_dim, 1, stride=1),
-#             nn.ReLU(),
-#             nn.BatchNorm2d(h_dim)
-#         )
+            nn.Conv2d(512, h_dim, 1, stride=1),
+            nn.ReLU(),
+            nn.BatchNorm2d(h_dim)
+        )
+        
+        self.fc_mu = nn.Linear(h_dim, h_dim)
+        self.fc_log_var = nn.Linear(h_dim, h_dim)
 
-#         self.decode = nn.Sequential(
-#             nn.ConvTranspose2d(h_dim, 1024, 1, stride=1),
-#             nn.ReLU(),
-#             nn.BatchNorm2d(1024),
+        self.decode = nn.Sequential(
+            nn.ConvTranspose2d(h_dim, 512, 1, stride=1),
+            nn.ReLU(),
+            nn.BatchNorm2d(512),
             
-#             nn.ConvTranspose2d(1024, 512, 4, padding=1, stride=2),
-#             nn.ReLU(),
-#             nn.BatchNorm2d(512),
+            nn.ConvTranspose2d(512, 256, (4, 6), padding=1, stride=2),
+            nn.ReLU(),
+            nn.BatchNorm2d(256),
             
-#             nn.ConvTranspose2d(512, 512, 4, padding=1, stride=2),
-#             nn.ReLU(),
-#             nn.BatchNorm2d(512),
+            nn.ConvTranspose2d(256, 256, 4, padding=1, stride=2),
+            nn.ReLU(),
+            nn.BatchNorm2d(256),
             
-#             nn.ConvTranspose2d(512, 256, 4, padding=1, stride=2),
-#             nn.ReLU(),
-#             nn.BatchNorm2d(256),
+            nn.ConvTranspose2d(256, 128, 4, padding=1, stride=2),
+            nn.ReLU(),
+            nn.BatchNorm2d(128),
             
-#             nn.ConvTranspose2d(256, 256, 4, padding=1, stride=2),
-#             nn.ReLU(),
-#             nn.BatchNorm2d(256),
+            nn.ConvTranspose2d(128, 128, 4, padding=1, stride=2),
+            nn.ReLU(),
+            nn.BatchNorm2d(128),
             
-#             nn.ConvTranspose2d(256, 128, 4, padding=1, stride=2),
-#             nn.ReLU(),
-#             nn.BatchNorm2d(128),
+            nn.ConvTranspose2d(128, 64, 4, padding=1, stride=2),
+            nn.ReLU(),
+            nn.BatchNorm2d(64),
             
-#             nn.ConvTranspose2d(128, 128, 4, padding=1, stride=2),
-#             nn.ReLU(),
-#             nn.BatchNorm2d(128),
+            nn.ConvTranspose2d(64, 64, 4, padding=1, stride=2),
+            nn.ReLU(),
+            nn.BatchNorm2d(64),
             
-#             nn.ConvTranspose2d(128, 1, 4, padding=1, stride=2),
-#             nn.Sigmoid()
-#         )
+            nn.ConvTranspose2d(64, 1, (4, 5), padding=(1, 4), stride=2)
+        )
         
-#     def forward(self, x):
-#         h = self.encode(x)
-#         return self.decode(h)
+    def reparameterize(self, mu, logvar):
+        """
+        Reparameterization trick to sample from N(mu, var) from
+        N(0,1).
+        :param mu: (Tensor) Mean of the latent Gaussian [B x D]
+        :param logvar: (Tensor) Standard deviation of the latent Gaussian [B x D]
+        :return: (Tensor) [B x D]
+        """
+        std = torch.exp(0.5 * logvar)
+        eps = torch.randn_like(std)
+        return eps * std + mu
+        
+    def forward(self, x):
+        h = self.encode(x)
+        h = h.view(h.size(0), -1)
+        
+        mu, log_var = self.fc_mu(h), self.fc_log_var(h)
+        z = self.reparameterize(mu, log_var)
+        z = z[..., None, None]
+        
+        if self.sigmoid:
+            return torch.sigmoid(self.decode(z)), mu, log_var
+        else:
+            return self.decode(z), mu, log_var
     
 class WavAutoencoder(nn.Module):
     def __init__(self, h_dim=1024):
