@@ -232,7 +232,10 @@ class NSynth(Dataset):
             k = os.path.join(self.data_dir, 'audio/{}.wav'.format(k))
             self.meta[k] = v
             
-        self.files = list(self.meta.keys())
+        self.meta = pd.DataFrame([{**{'filename' : k}, **v} for k, v in self.meta.items()])
+        self.meta['character'] = self.meta['instrument_source_str'].apply(
+            lambda x : 'digital' if (x == 'electronic') or (x == 'synthetic') else x
+        )
         
         self.transform = create_audio_transform(
             self.sample_rate,
@@ -248,14 +251,14 @@ class NSynth(Dataset):
         )
 
     def __len__(self):
-        return len(self.files)
+        return len(self.meta)
 
     def __getitem__(self, idx):
-        wav_fname = self.files[idx]
+        wav_fname = self.meta.iloc[idx]['filename']
         features = self.extract_features(wav_fname)
         
         if self.include_meta:
-            return features, self.meta[self.files[idx]]
+            return features, self.meta.iloc[idx].to_dict()
         else:
             return features
     
